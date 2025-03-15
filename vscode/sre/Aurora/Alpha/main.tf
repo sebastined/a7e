@@ -1,3 +1,5 @@
+#source=zero_VM
+
 provider "aws" {
   region = "eu-central-1"
 }
