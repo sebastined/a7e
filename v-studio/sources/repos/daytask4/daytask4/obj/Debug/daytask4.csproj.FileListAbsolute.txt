@@ -1,0 +1,7 @@
+C:\Users\sebastine\Documents\dev\vs\sources\repos\daytask4\daytask4\obj\Debug\daytask4.csproj.AssemblyReference.cache
+C:\Users\sebastine\Documents\dev\vs\sources\repos\daytask4\daytask4\obj\Debug\daytask4.csproj.CoreCompileInputs.cache
+C:\Users\sebastine\Documents\dev\vs\sources\repos\daytask4\daytask4\bin\Debug\daytask4.exe.config
+C:\Users\sebastine\Documents\dev\vs\sources\repos\daytask4\daytask4\bin\Debug\daytask4.exe
+C:\Users\sebastine\Documents\dev\vs\sources\repos\daytask4\daytask4\bin\Debug\daytask4.pdb
+C:\Users\sebastine\Documents\dev\vs\sources\repos\daytask4\daytask4\obj\Debug\daytask4.exe
+C:\Users\sebastine\Documents\dev\vs\sources\repos\daytask4\daytask4\obj\Debug\daytask4.pdb

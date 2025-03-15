@@ -1,0 +1,7 @@
+C:\Users\sebastine\Documents\dev\vs\sources\repos\06-03-\06-03-\obj\Debug\06-03-.csproj.AssemblyReference.cache
+C:\Users\sebastine\Documents\dev\vs\sources\repos\06-03-\06-03-\obj\Debug\06-03-.csproj.CoreCompileInputs.cache
+C:\Users\sebastine\Documents\dev\vs\sources\repos\06-03-\06-03-\bin\Debug\06-03-.exe.config
+C:\Users\sebastine\Documents\dev\vs\sources\repos\06-03-\06-03-\bin\Debug\06-03-.exe
+C:\Users\sebastine\Documents\dev\vs\sources\repos\06-03-\06-03-\bin\Debug\06-03-.pdb
+C:\Users\sebastine\Documents\dev\vs\sources\repos\06-03-\06-03-\obj\Debug\06-03-.exe
+C:\Users\sebastine\Documents\dev\vs\sources\repos\06-03-\06-03-\obj\Debug\06-03-.pdb
