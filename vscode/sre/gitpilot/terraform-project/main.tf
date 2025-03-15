@@ -115,11 +115,16 @@ resource "aws_security_group" "omega_sg" {
   }
 }
 
+resource "aws_key_pair" "omega_key" {
+  key_name   = "omega-key"
+  public_key = file("${path.module}/ssh_keys/omega-key.pub")
+}
+
 resource "aws_instance" "omega_web" {
   ami                    = "ami-07eef52105e8a2059"
   instance_type          = "t2.micro"
   subnet_id              = aws_subnet.omega_pub1.id
-  key_name               = "nixssh"
+  key_name               = aws_key_pair.omega_key.key_name
   vpc_security_group_ids = [aws_security_group.omega_sg.id]
   tags = {
     Name = "omega-web"
