@@ -1,0 +1,29 @@
+# External PostgreSQL (from data00 ns)
+postgresql:
+  host: postgres.data00.svc.cluster.local
+  port: 5432
+  user: postgres
+  password: password123
+  name: authentik
+
+# External Redis (from prod00 ns)
+redis:
+  host: redis.prod00.svc.cluster.local
+  port: 6379
+  password: redis123
+
+# Use your custom storage class
+storage:
+  className: america
+
+# Disable ingress (we use MetalLB instead)
+ingress:
+  enabled: false
+
+# Configure the server service directly (LoadBalancer for MetalLB)
+server:
+  service:
+    type: LoadBalancer
+    ports:
+      http: 80
+      https: 443

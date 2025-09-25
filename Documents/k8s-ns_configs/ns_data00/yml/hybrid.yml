@@ -1,0 +1,79 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: alp-rem-k8s
+  namespace: data00
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: africa
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alp-rem-k8s
+  namespace: data00
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alp-rem-k8s
+  template:
+    metadata:
+      labels:
+        app: alp-rem-k8s
+    spec:
+      serviceAccountName: default
+      containers:
+        - name: alp-rem-k8s
+          image: alpine:latest
+          imagePullPolicy: Always
+          command:
+            - sh
+            - -c
+            - |
+              apk update && apk add --no-cache bash sudo openssh curl ca-certificates git busybox-extras && \
+              adduser -D -u 1000 master && \
+              echo "master:000" | chpasswd && \
+              adduser master wheel && \
+              echo "master ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
+              mkdir -p /home/master/.ssh && chmod 700 /home/master/.ssh && \
+              ssh-keygen -A && \
+              curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
+              chmod +x ./kubectl && mv ./kubectl /usr/local/bin/kubectl && \
+              # Copy root kubeconfig to master user so kubectl works without sudo
+              mkdir -p /home/master/.kube && \
+              cp /root/.kube/config /home/master/.kube/config && \
+              chown -R master:master /home/master/.kube && \
+              chmod 600 /home/master/.kube/config && \
+              /usr/sbin/sshd -D -e
+          volumeMounts:
+            - mountPath: /storage
+              name: storage
+            - mountPath: /root/.kube
+              name: kubeconfig-volume
+              readOnly: true
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: alp-rem-k8s
+        - name: kubeconfig-volume
+          secret:
+            secretName: kubeconfig-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alp-rem-k8s
+  namespace: data00
+spec:
+  type: LoadBalancer
+  selector:
+    app: alp-rem-k8s
+  ports:
+    - name: ssh
+      port: 22
+      targetPort: 22

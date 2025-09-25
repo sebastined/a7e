@@ -1,0 +1,133 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-pvc-asia-1
+  namespace: prod00
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: asia
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-pvc-asia-2
+  namespace: prod00
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: asia
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-pvc-africa-1
+  namespace: prod00
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: africa
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-pvc-africa-2
+  namespace: prod00
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: africa
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: prod00
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+        - name: minio
+          image: quay.io/minio/minio:latest
+          args:
+            - server
+            - /data1
+            - /data2
+            - /data3
+            - /data4
+            - --console-address
+            - ":9001"
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: root-user
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: root-password
+          ports:
+            - containerPort: 9000
+              name: api
+            - containerPort: 9001
+              name: console
+          volumeMounts:
+            - name: data1
+              mountPath: /data1
+            - name: data2
+              mountPath: /data2
+            - name: data3
+              mountPath: /data3
+            - name: data4
+              mountPath: /data4
+      volumes:
+        - name: data1
+          persistentVolumeClaim:
+            claimName: minio-pvc-asia-1
+        - name: data2
+          persistentVolumeClaim:
+            claimName: minio-pvc-asia-2
+        - name: data3
+          persistentVolumeClaim:
+            claimName: minio-pvc-africa-1
+        - name: data4
+          persistentVolumeClaim:
+            claimName: minio-pvc-africa-2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: prod00
+spec:
+  type: LoadBalancer
+  selector:
+    app: minio
+  ports:
+    - name: api
+      port: 9000
+      targetPort: 9000
+    - name: console
+      port: 9001
+      targetPort: 9001

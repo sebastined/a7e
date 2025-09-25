@@ -1,0 +1,40 @@
+postgresql:
+  enabled: false
+
+
+# Global settings
+global:
+  postgresql:
+    enabled: false   # disable built-in Postgres since we use external
+
+
+# Keycloak Admin User Configuration
+auth:
+  adminUser: admin
+  adminPassword: password123
+
+# External PostgreSQL configuration
+externalDatabase:
+  host: postgres.data00.svc.cluster.local
+  port: 5432
+  user: bn_keycloak
+  password: password123
+  database: bitnami_keycloak
+
+# Kubernetes Service Configuration
+service:
+  type: LoadBalancer
+  port: 80
+
+# Extra environment variables
+extraEnvVars:
+  - name: KC_PRODUCTION
+    value: "true"
+  - name: KC_HOSTNAME_STRICT
+    value: "false"
+  - name: KC_HTTP_ENABLED
+    value: "true"
+  - name: VERTX_WORKER_POOL_SIZE
+    value: "20"
+  - name: VERTX_EVENT_LOOP_POOL_SIZE
+    value: "8"
