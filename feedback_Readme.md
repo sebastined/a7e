@@ -135,8 +135,3 @@ aws --endpoint-url=http://localhost:4566 logs get-log-events --log-group-name /a
 * [AWS CloudFormation Documentation](https://docs.aws.amazon.com/cloudformation/)
 * [Terraform AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
 
----
-
-This README is **job-assessment ready**: clear, concise, professional, explains what was done, and provides instructions to test everything locally.
-
-
