@@ -1,0 +1,14 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: int-wildcard-cert
+  namespace: edge
+spec:
+  secretName: int-wildcard
+  issuerRef:
+    name: cloudflare
+    kind: ClusterIssuer
+  dnsNames:
+    - "*.int.sebastine.ng"
+  privateKey:
+    rotationPolicy: Always

@@ -1,0 +1,19 @@
+# metallb-crd.yaml
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: default
+  namespace: metallb-system
+spec:
+  addresses:
+    - 20.95.5.11-20.95.5.99
+
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: advertise-default
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+    - default

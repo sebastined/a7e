@@ -1,0 +1,32 @@
+# Pi-hole Helm values.yaml
+
+# DNSMasq custom entries (local devices)
+dnsmasq:
+  customDnsEntries:
+    - address=/nas/20.95.5.5   # Your NAS
+  # Removed CNAME entries
+
+# Persistent storage
+persistentVolumeClaim:
+  enabled: true
+
+# Web interface exposure
+serviceWeb:
+  type: LoadBalancer
+  loadBalancerIP: 20.95.5.20
+  annotations:
+    metallb.universe.tf/allow-shared-ip: dns-webui
+
+# DNS service exposure
+serviceDns:
+  type: LoadBalancer
+  loadBalancerIP: 20.95.5.55
+  annotations:
+    metallb.universe.tf/allow-shared-ip: dns-server
+
+# Upstream DNS servers (Cloudflare + AdGuard)
+podDnsConfig:
+  enabled: false   # Do NOT override pod DNS
+
+web:
+  password: "admin"
