@@ -1,3 +1,0 @@
-namespace: "edge"
-crds:
-  enabled: true
