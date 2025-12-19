@@ -26,6 +26,10 @@ Secrets (demo):
 
 - An optional example SecureString SSM parameter can be created by setting `enable_secrets = true` and providing `example_secret_value` (default disabled). When a KMS key is available it will be used to encrypt the secret.
 
+Security scanning (Snyk):
+
+- This repository is set up to be scanned by Snyk. To run Snyk locally you must authenticate (`snyk auth`) with your account/API token before running `snyk code test` or `snyk code test <path>`.
+
 
 Have fun!
 
