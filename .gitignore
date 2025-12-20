@@ -1,0 +1,25 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform/.terraform.lock.hcl
+
+# LocalStack
+terraform/volume/cache/
+terraform/volume/lib/
+terraform/volume/tmp/
+terraform/volume/logs/
+
+# OS
+.DS_Store
+*.swp
+*.swo
+*~
