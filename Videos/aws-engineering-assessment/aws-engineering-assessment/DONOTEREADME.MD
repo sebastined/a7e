@@ -59,6 +59,32 @@
 
 Notes:
 - By default this repo avoids creating some resources on LocalStack that are flaky (KMS and DynamoDB). To force creation on LocalStack set `force_create_on_localstack = true`.
+ - By default this repo avoids creating some resources on LocalStack that are flaky (KMS, DynamoDB, SQS DLQs). To force creation on LocalStack set `force_create_on_localstack = true` (may be flaky). Alternatively, the DLQ will not be created when `use_localstack = true` and `force_create_on_localstack = false`.
+
+Importing SQS DLQ (LocalStack helper):
+
+If creating an SQS DLQ via Terraform against LocalStack is slow or hangs, you can create it manually and import it into Terraform state:
+
+1. Create the queue using the helper script:
+
+```bash
+cd terraform
+./scripts/create_dlq_localstack.sh a7e-file-processor-dlq http://localhost:4566
+```
+
+2. Import into Terraform state:
+
+```bash
+terraform import 'module.lambda.aws_sqs_queue.dlq[0]' '<queue-url-returned-by-script>'
+```
+
+3. Re-run apply (without `force_create_on_localstack=true` unless you want TF to try creating it):
+
+```bash
+terraform apply -var='use_localstack=true' -var='localstack_endpoint=http://localhost:4566'
+```
+
+This avoids Terraform waiting on LocalStack SQS creation and is the recommended local workflow.
 - KMS resources are not created when `use_localstack = true` (this prevents LocalStack KMS CreateKey failures). Therefore SecureString encryption with a KMS key may not work locally unless you use real AWS or adjust the KMS creation flag.
 
 ### 4) Run Lambda unit tests (local)
