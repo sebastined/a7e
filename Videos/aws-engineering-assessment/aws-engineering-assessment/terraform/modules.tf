@@ -41,7 +41,8 @@ module "iam" {
   lambda_role_name = "${local.prefix}-lambda-exec"
   sfn_role_name    = "${local.prefix}-sfn-exec"
 
-  dynamodb_arn = module.dynamodb.table_arn
+  # If DynamoDB is not created by Terraform (e.g., LocalStack), fall back to a constructed ARN
+  dynamodb_arn = var.use_localstack && !var.force_create_on_localstack ? "arn:aws:dynamodb:${var.region}:${data.aws_caller_identity.current.account_id}:table/${var.dynamodb_table_name}" : module.dynamodb.table_arn
   s3_bucket_arn = module.s3.bucket_arn
   sns_arn       = module.sns.arn
   region        = var.region
@@ -86,11 +87,14 @@ module "lambda" {
   alarm_actions = [module.sns.arn]
   tracing_mode  = "Active"
   environment = {
-    TABLE_NAME = module.dynamodb.table_name
+    # Use configured table name (works even when DynamoDB is not created by Terraform on LocalStack)
+    TABLE_NAME = var.dynamodb_table_name
     REGION     = var.region
     SNS_TOPIC  = module.sns.arn
     AWS_ENDPOINT_URL = var.use_localstack ? var.localstack_endpoint : ""
   }
+  use_localstack = var.use_localstack
+  force_create_on_localstack = var.force_create_on_localstack
   depends_on = [module.iam]
 }
 
