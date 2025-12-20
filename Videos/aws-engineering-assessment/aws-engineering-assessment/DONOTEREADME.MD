@@ -4,6 +4,54 @@
 
 ---
 
+## Prerequisites & Fresh Ubuntu Setup 🖥️
+
+### For a fresh Ubuntu OS (from scratch)
+
+Run these commands once to set up your environment:
+
+```bash
+# Update system packages
+sudo apt-get update && sudo apt-get upgrade -y
+
+# Install Docker & Docker Compose
+sudo apt-get install -y docker.io docker-compose
+sudo usermod -aG docker $USER
+newgrp docker  # or logout/login to apply group
+
+# Install Terraform
+wget https://releases.hashicorp.com/terraform/1.5.7/terraform_1.5.7_linux_amd64.zip
+unzip terraform_1.5.7_linux_amd64.zip
+sudo mv terraform /usr/local/bin/
+terraform --version  # verify
+
+# Install Python & pip
+sudo apt-get install -y python3 python3-pip python3-venv
+
+# Install AWS CLI v2
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+aws --version  # verify
+
+# Install Git
+sudo apt-get install -y git
+```
+
+### For users with prerequisites already installed
+
+Just verify:
+
+```bash
+docker --version  # Docker version 20+ recommended
+docker-compose --version
+terraform --version  # 1.5.x or later
+python3 --version  # 3.9+
+aws --version  # AWS CLI v2
+```
+
+---
+
 ## Summary of work performed 🔧
 - Removed wildcard usage in KMS policies and hardened IAM permissions.
 - Parameterized LocalStack endpoints (no hardcoded `http://localhost:4566`).
@@ -34,22 +82,179 @@
 ---
 
 ## Local development & testing (recommended flow) 🧪
-### 1) Start LocalStack (from this repo)
-- Using included compose file (example):
 
-  cd terraform
-  docker compose up -d
+### Step-by-step deployment & end-to-end test
 
-> If you prefer Docker directly: `docker run -d -p 4566:4566 localstack/localstack`
+This section provides the exact sequence of commands to deploy and validate the entire system locally.
 
-### 2) Quick Terraform validate
+### 1) Clone the repository
 
-  cd terraform
-  terraform init -backend=false
-  terraform validate
+```bash
+git clone https://github.com/sebastined/a7e.git
+cd a7e
+```
 
-### 3) Plan & Apply (LocalStack)
+### 2) Start LocalStack (from repo root)
+
+```bash
+cd terraform
+docker compose up -d
+```
+
+Wait a few seconds for LocalStack to start. Verify:
+
+```bash
+docker ps --filter name=localstack --format "table {{.Names}}\t{{.Status}}"
+# Should show: localstack  Up X seconds (healthy)
+```
+
+### 3) Create the DynamoDB table manually (avoids LocalStack creation flakiness)
+
+```bash
+./scripts/create_dynamodb_localstack.sh files http://localhost:4566
+```
+
+Expected output: Table `files` created with primary key `Filename`.
+
+### 4) Initialize Terraform
+
+```bash
+terraform init -backend=false
+terraform validate  # Should pass with only S3 versioning deprecation warning
+```
+
+### 5) Apply Terraform (skip flaky LocalStack resources)
+
+```bash
+terraform apply \
+  -var='use_localstack=true' \
+  -var='localstack_endpoint=http://localhost:4566' \
+  -var='force_create_on_localstack=false' \
+  -lock=false \
+  -auto-approve
+```
+
+This provisions:
+- S3 bucket (`a7e-files`)
+- Lambda function (`a7e-file-processor`)
+- SNS topic (`a7e-security-alerts`)
+- IAM roles & policies
+- CloudWatch alarms (skipped on LocalStack for speed)
+- Step Functions state machine
+
+Wait for completion (30-60 seconds typical).
+
+### 6) Run Lambda unit tests locally
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r lambda/requirements.txt
+pytest -q lambda/tests
+```
+
+Expected: `1 passed` (Lambda handler test with moto mocks).
+
+### 7) Test the end-to-end flow: Upload → Lambda → DynamoDB
+
+From repo root:
+
+```bash
+cd /path/to/repo/root
+
+# 7a) Upload a test file to S3 (triggers Lambda via S3 notification)
+aws --endpoint-url http://localhost:4566 s3 cp README.md s3://a7e-files/README.md
+
+# 7b) Verify the file is in S3
+aws --endpoint-url http://localhost:4566 s3 ls s3://a7e-files/
+
+# 7c) Scan DynamoDB to confirm Lambda processed the upload
+aws --endpoint-url http://localhost:4566 dynamodb scan --table-name files
+```
+
+Expected DynamoDB output:
+```json
+{
+    "Items": [
+        {
+            "Filename": {
+                "S": "README.md"
+            },
+            "UploadTimestamp": {
+                "S": "2025-12-20T10:45:23Z"
+            }
+        }
+    ],
+    "Count": 1
+}
+```
+
+✅ **Success! The end-to-end flow is working: S3 upload → Lambda trigger → DynamoDB write.**
+
+### 8) Run security scanning
+
+#### Lambda unit tests (already ran in step 6); now run static analysis:
+
+```bash
+cd terraform
+
+# Validate Terraform (quick check)
+terraform validate
+
+# Run tfsec (if installed locally)
+tfsec . 2>/dev/null || echo "tfsec not installed; install via: brew install tfsec or apt install tfsec"
+
+# Run tflint (if installed locally)
+tflint 2>/dev/null || echo "tflint not installed"
+```
+
+#### Run Snyk code scan (requires authentication):
+
+```bash
+snyk auth  # Follow link to authenticate
+snyk code test
+```
+
+---
+
+## Troubleshooting & tips 🔧
+
+### Common issues during deployment
+
+| Issue | Solution |
+|-------|----------|
+| `error: state lock` | Run with `-lock=false` for local testing: `terraform apply -lock=false ...` |
+| `DynamoDB creation hangs` | Use the helper script to create manually: `./scripts/create_dynamodb_localstack.sh` |
+| `SQS DLQ creation hangs` | Use the helper to create & import: `./scripts/create_dlq_localstack.sh` then `terraform import` |
+| Lambda not triggered on S3 upload | Verify S3 notifications: `aws --endpoint-url http://localhost:4566 s3api get-bucket-notification-configuration --bucket a7e-files` |
+| `TABLE_NAME not set` error in Lambda | Ensure DynamoDB table exists before apply: `./scripts/create_dynamodb_localstack.sh files` |
+| LocalStack container unhealthy | Restart: `docker compose down && docker compose up -d && sleep 5` |
+
+### Cleanup & reset
+
+```bash
+# Stop LocalStack
+cd terraform
+docker compose down
+
+# Remove Terraform state (to start fresh)
+rm -f terraform.tfstate terraform.tfstate.backup .terraform.tfstate.lock.info
+
+# Remove Lambda build artifacts
+rm -rf lambda_build/
+
+# Clean Python venv
+rm -rf .venv
+
+# Full reset: remove all local artifacts
+git clean -fd  # Warning: removes untracked files
+```
+
+---
+
+## Plan & Apply (LocalStack)
 - Default variables are tuned for local testing. Example plan using LocalStack:
+
 
   terraform plan -var='use_localstack=true' -var='localstack_endpoint=http://localhost:4566' -var='force_create_on_localstack=false'
 
@@ -85,6 +290,41 @@ terraform apply -var='use_localstack=true' -var='localstack_endpoint=http://loca
 ```
 
 This avoids Terraform waiting on LocalStack SQS creation and is the recommended local workflow.
+
+Creating a DynamoDB table in LocalStack for uploads:
+
+1. Create the table (the Lambda expects a primary key `Filename`):
+
+```bash
+cd terraform
+./scripts/create_dynamodb_localstack.sh files http://localhost:4566
+```
+
+2. Verify the table exists:
+
+```bash
+aws --endpoint-url http://localhost:4566 dynamodb describe-table --table-name files
+```
+
+3. Apply Terraform (Lambda will be configured to use `files` as `TABLE_NAME` even when DynamoDB wasn't created by Terraform):
+
+```bash
+terraform apply -var='use_localstack=true' -var='localstack_endpoint=http://localhost:4566' -var='force_create_on_localstack=false' -auto-approve
+```
+
+4. Upload a test file to trigger the function (example using aws CLI):
+
+```bash
+aws --endpoint-url http://localhost:4566 s3 cp ./test-file.txt s3://a7e-files/test-file.txt
+```
+
+5. Check the DynamoDB table for the inserted item:
+
+```bash
+aws --endpoint-url http://localhost:4566 dynamodb scan --table-name files
+```
+
+This flow avoids Terraform creating the table (so it bypasses flaky LocalStack table creation) while ensuring IAM and Lambda will operate correctly using the configured table name.
 - KMS resources are not created when `use_localstack = true` (this prevents LocalStack KMS CreateKey failures). Therefore SecureString encryption with a KMS key may not work locally unless you use real AWS or adjust the KMS creation flag.
 
 ### 4) Run Lambda unit tests (local)
@@ -104,56 +344,103 @@ Expect: 1+ tests to pass (current single unit test should pass).
 
 ---
 
-## Secrets (demo) 🔐
-- To create an example SSM SecureString via Terraform:
+## Optional: Secrets (demo) 🔐
 
-  terraform apply -var='enable_secrets=true' -var='example_secret_value=supersecret'
+This repo includes an optional SSM Parameter Store + KMS integration for secure secret storage.
 
-- If a KMS key exists (i.e., not using LocalStack), it will be used to encrypt the parameter via `key_id = module.kms[0].key_arn`.
+To enable:
+
+```bash
+terraform apply -var='enable_secrets=true' -var='example_secret_value=supersecret'
+```
+
+If a KMS key exists (i.e., not using LocalStack), it will encrypt the parameter. Retrieve it with:
+
+```bash
+aws ssm get-parameter --name '/a7e-demo-secret' --with-decryption --region us-east-1
+```
 
 ---
 
-## Static scanning & CI 🛡️
-- GitHub Actions has a lightweight CI workflow at `.github/workflows/ci.yml` that runs:
-  - `terraform validate`
-  - `pytest` for Lambda unit tests
-  - `tfsec`, `tflint`, and `cfn-nag`
+## CI/CD & Security Scanning 🛡️
 
-- Snyk: the repository includes instructions for Snyk, but Snyk requires authentication. To run Snyk locally:
+### GitHub Actions Workflow
 
-  snyk auth
-  snyk code test
+The repository includes `.github/workflows/ci.yml` which runs on every push:
+- `terraform validate` — syntax & structure check
+- `pytest` — Lambda unit tests (moto mocks)
+- `tfsec` — Terraform security static analysis
+- `tflint` — Terraform linting & best practices
+- `cfn-nag` — CloudFormation security checks
 
-Or, add SNYK_TOKEN as a GitHub secret and add a Snyk job to the CI workflow if you want automated scanning on PRs.
+All jobs are integrated and must pass before merge (configurable via branch protection rules).
+
+### Local Snyk scanning (optional)
+
+Snyk requires authentication and is not automated in CI by default. To run locally:
+
+```bash
+snyk auth
+snyk code scan --project-name=a7e-file-processor  # Code scanning
+snyk iac test terraform/                          # IaC scanning
+```
+
+To add Snyk to GitHub Actions, create a `SNYK_TOKEN` repository secret and add a job to `.github/workflows/ci.yml`.
 
 ---
 
 ## Notes, caveats & follow-ups ⚠️
-- LocalStack DynamoDB creation may be flaky and cause Terraform to wait or time out. For CI stability consider:
-  - Using DynamoDB Local in CI, or
-  - Running a dedicated integration job on a runner that can create a real ephemeral AWS environment (cost and access permitting).
-- The repository includes example/optional features to demonstrate best practices; production usage should be reviewed (e.g., monitoring/alarm thresholds, cross-account KMS policies, least-privilege IAM audits).
+
+**LocalStack & CI/CD:**
+- LocalStack DynamoDB and SQS creation may be flaky. For stable CI, consider:
+  - Using DynamoDB Local instead, or
+  - Running integration tests against a real ephemeral AWS environment (cost & access permitting)
+- The included helper scripts (`create_dynamodb_localstack.sh`, `create_dlq_localstack.sh`) provide manual workarounds
+
+**Production readiness:**
+- The repo includes optional/example features (SSM secrets, CloudWatch alarms, Step Functions). Before production:
+  - Review monitoring thresholds (DLQ alarms, CloudWatch metrics)
+  - Audit IAM least-privilege policies (use `aws accessanalyzer validate-policy`)
+  - Enable CloudTrail for Lambda & API Gateway logging
+  - Implement cross-account KMS policies if needed
+  - Add encryption at rest for S3 bucket and DynamoDB
+
+**Known limitations:**
+- KMS resources are skipped when `use_localstack=true` (LocalStack KMS API is limited)
+- CloudWatch log groups and alarms are skipped on LocalStack (creation is slow)
+- SQS DLQ may hang during creation on LocalStack; use helper script instead
 
 ---
 
-## Useful commands (cheat-sheet)
-- Terraform init/validate: `terraform init -backend=false && terraform validate`
-- Terraform plan: `terraform plan -var='use_localstack=true' -var='localstack_endpoint=http://localhost:4566'`
-- Terraform apply: `terraform apply -var='use_localstack=true' -var='localstack_endpoint=http://localhost:4566'`
-- Run Lambda unit tests: `pytest -q terraform/lambda/tests`
-- Run tfsec locally: `tfsec terraform/` (install via `brew` / `apt` / `apt-get` / official releases)
-- Run tflint locally: `tflint` in `terraform/` (install tflint first)
-- Run cfn-nag locally: `cfn_nag_scan --input-path cloudformation/`
+## Quick reference (cheat-sheet)
+
+| Task | Command |
+|------|---------|
+| **Init & validate** | `terraform init -backend=false && terraform validate` |
+| **Plan (LocalStack)** | `terraform plan -var='use_localstack=true' -var='localstack_endpoint=http://localhost:4566'` |
+| **Apply (LocalStack)** | `terraform apply -var='use_localstack=true' -var='localstack_endpoint=http://localhost:4566'` |
+| **Run unit tests** | `pytest -q terraform/lambda/tests` |
+| **Run tfsec** | `tfsec terraform/` |
+| **Run tflint** | `tflint` (from `terraform/` dir) |
+| **Run cfn-nag** | `cfn_nag_scan --input-path cloudformation/` |
+| **Snyk code scan** | `snyk code scan --project-name=a7e-file-processor` |
+| **Snyk IaC scan** | `snyk iac test terraform/` |
+| **View Terraform outputs** | `terraform output` |
+| **Destroy stack** | `terraform destroy -var='use_localstack=true' -var='localstack_endpoint=http://localhost:4566'` |
 
 ---
 
-## Contact / Author
-- Author: GitHub Copilot (automated changes performed in this repository)
+## Summary
 
----
+This repository demonstrates a **DevSecOps-first IaC implementation** with:
+- ✅ Secure AWS resources (Lambda, DynamoDB, S3, SNS, Step Functions)
+- ✅ Least-privilege IAM policies (no `Resource="*"`)
+- ✅ Static analysis (tfsec, tflint, cfn-nag) in CI
+- ✅ Unit tests with moto mocks
+- ✅ Automated S3 → Lambda → DynamoDB workflow
+- ✅ LocalStack dev environment for zero-cost local testing
+- ✅ GitHub Actions CI workflow
+- ✅ Comprehensive documentation for fresh Ubuntu OS deployment
 
-If you want, I can:
-- Add a Snyk job to GitHub Actions (requires `SNYK_TOKEN` repo secret), or
-- Implement a deterministic DynamoDB integration test for CI.
+**For questions or contributions**, refer to the project structure and follow the deployment guide above.
 
-Pick the next step and I will proceed.
