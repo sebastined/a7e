@@ -1,0 +1,3 @@
+[
+  "lambda/tests/test_handler.py::test_lambda_puts_item"
+]
