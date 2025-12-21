@@ -91,5 +91,9 @@ variable "env" {
 variable "common_tags" {
   description = "Map of tags to apply to all resources via provider default_tags"
   type        = map(string)
-  default     = {}
+  default     = {
+    Owner       = "DevOps Team"
+    Compliance  = "Required"
+    Backup      = "Daily"
+  }
 }

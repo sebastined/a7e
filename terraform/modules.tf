@@ -6,6 +6,11 @@ module "kms" {
   alias  = "${local.prefix}-main"
   account_id = data.aws_caller_identity.current.account_id
   create = true
+  tags   = merge(var.common_tags, { 
+    Name        = "${local.prefix}-kms-key"
+    Environment = var.env
+    Purpose     = "Data encryption"
+  })
 }
 
 module "s3" {
@@ -13,7 +18,12 @@ module "s3" {
   bucket_name     = "${local.prefix}-files"
   expiration_days = var.expiration_days
   kms_key_arn     = length(module.kms) > 0 ? module.kms[0].key_arn : ""
-  tags            = merge(var.common_tags, { Name = "${local.prefix}-files", Environment = var.env })
+  tags            = merge(var.common_tags, { 
+    Name        = "${local.prefix}-files"
+    Environment = var.env
+    Purpose     = "File storage"
+    DataClass   = "Sensitive"
+  })
 }
 
 module "dynamodb" {
@@ -26,13 +36,22 @@ module "dynamodb" {
   create      = var.use_localstack ? (var.force_create_on_localstack ? true : false) : true
   create_timeout = var.use_localstack ? "2m" : "10m"
   force_create_on_localstack = var.force_create_on_localstack
-  tags        = merge(var.common_tags, { Name = "${local.prefix}-files-table", Environment = var.env })
+  tags        = merge(var.common_tags, { 
+    Name        = "${local.prefix}-files-table"
+    Environment = var.env
+    Purpose     = "File metadata storage"
+    DataClass   = "Sensitive"
+  })
 }
 
 module "sns" {
   source = "./modules/sns"
   name   = "${local.prefix}-security-alerts"
-  tags   = merge(var.common_tags, { Environment = var.env })
+  kms_key_arn = length(module.kms) > 0 ? module.kms[0].key_arn : ""
+  tags   = merge(var.common_tags, { 
+    Environment = var.env
+    Purpose     = "Security and operational alerts"
+  })
 }
 
 module "iam" {
@@ -47,12 +66,19 @@ module "iam" {
   sns_arn       = module.sns.arn
   region        = var.region
   account_id    = data.aws_caller_identity.current.account_id
-  tags = merge(var.common_tags, { Environment = var.env })
+  tags = merge(var.common_tags, { 
+    Environment = var.env
+    Purpose     = "IAM roles and policies"
+  })
 }
 
 # Create Step Functions policy now that Lambda is in the graph to avoid circular dependency
 resource "aws_iam_policy" "sfn_policy" {
   name = "${local.prefix}-sfn-policy"
+  tags = merge(var.common_tags, { 
+    Environment = var.env
+    Purpose     = "Step Functions execution policy"
+  })
 
   policy = jsonencode({
     Version = "2012-10-17",
@@ -95,6 +121,11 @@ module "lambda" {
   }
   use_localstack = var.use_localstack
   force_create_on_localstack = var.force_create_on_localstack
+  tags = merge(var.common_tags, { 
+    Environment = var.env
+    Purpose     = "File processing"
+    Runtime     = var.lambda_runtime
+  })
   depends_on = [module.iam]
 }
 
