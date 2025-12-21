@@ -284,9 +284,20 @@ terraform plan -var-file="environments/localstack.tfvars"
 ```
 
 #### Step 5: Deploy Infrastructure
+
+**Note:** Due to a known Terraform + LocalStack compatibility issue where S3 bucket creation hangs, we need to create the bucket manually first:
+
 ```bash
-# Apply the configuration
+# Create S3 bucket manually (workaround for LocalStack)
+aws --endpoint-url=http://localhost:4566 s3 mb s3://a7e-files
+
+# Now apply Terraform configuration
 terraform apply -var-file="environments/localstack.tfvars" -auto-approve
+```
+
+**Alternative - Use deployment script:**
+```bash
+./deploy-localstack.sh
 ```
 
 **Expected output:**
@@ -645,14 +656,19 @@ git clone https://github.com/sebastined/a7e.git && cd a7e
 cd cloudformation && docker-compose up -d && cd ..
 
 # 3. Deploy infrastructure
-cd terraform && terraform init && \
+cd terraform && terraform init
+
+# 4. Create S3 bucket (workaround for LocalStack compatibility)
+aws --endpoint-url=http://localhost:4566 s3 mb s3://a7e-files
+
+# 5. Apply Terraform
 terraform apply -var-file="environments/localstack.tfvars" -auto-approve
 
-# 4. Run tests
+# 6. Run tests
 cd lambda && python3 -m venv .venv && source .venv/bin/activate && \
 pip install -r requirements.txt && pip install pytest moto && pytest tests/ -v
 
-# 5. Verify deployment
+# 7. Verify deployment
 aws --endpoint-url=http://localhost:4566 s3 ls
 aws --endpoint-url=http://localhost:4566 lambda list-functions
 aws --endpoint-url=http://localhost:4566 dynamodb list-tables
