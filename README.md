@@ -757,3 +757,160 @@ terraform apply -var-file="environments/production.tfvars"
 **Last Updated**: December 21, 2025
 
 Have fun! 🚀
+
+
+
+
+
+
+
+
+
+
+
+## 🧹 Cleanup
+
+This section explains how to **cleanly tear down all resources** created during local testing or production deployment. Always clean up after testing to avoid stale state, locked resources, or unnecessary cost.
+
+---
+
+### 🔥 Terraform Cleanup (Infrastructure)
+
+#### LocalStack (Recommended for Tests)
+
+```bash
+cd terraform
+
+# Destroy all Terraform-managed resources in LocalStack
+tflocal destroy -var-file=environments/localstack.tfvars -auto-approve
+```
+
+If Terraform gets stuck due to LocalStack limitations:
+
+```bash
+# Force destroy without state refresh (LocalStack-safe)
+tflocal destroy \
+  -var-file=environments/localstack.tfvars \
+  -refresh=false \
+  -auto-approve
+```
+
+> 💡 **Why `-refresh=false`?**
+> LocalStack sometimes fails during refresh (especially CloudWatch Logs). This flag skips refresh and avoids hangs.
+
+---
+
+#### Production AWS (⚠️ Use with Caution)
+
+```bash
+cd terraform
+terraform destroy -var-file=environments/production.tfvars
+```
+
+Terraform will prompt for confirmation before deleting production resources.
+
+---
+
+### 🧱 Terraform State & Cache Cleanup (Local)
+
+Use this if Terraform state becomes corrupted or stuck:
+
+```bash
+cd terraform
+
+# Remove local state and caches
+rm -rf .terraform .terraform.lock.hcl terraform.tfstate terraform.tfstate.backup
+```
+
+Then reinitialize when needed:
+
+```bash
+tflocal init -get=false
+```
+
+---
+
+### 🐳 LocalStack Cleanup
+
+#### Stop LocalStack Containers
+
+```bash
+cd cloudformation
+docker-compose down
+```
+
+#### Full Reset (Containers + Volumes)
+
+```bash
+docker-compose down -v
+```
+
+> ⚠️ This **permanently deletes all LocalStack data**, including S3 buckets, DynamoDB tables, logs, and state.
+
+---
+
+### 🧪 Python / Test Environment Cleanup
+
+```bash
+cd terraform/lambda
+
+# Remove Python virtual environment
+rm -rf .venv __pycache__
+```
+
+Optional: clear pip cache
+
+```bash
+pip cache purge
+```
+
+---
+
+### 🧹 Optional: Docker System Cleanup
+
+If Docker disk usage grows too large:
+
+```bash
+docker system prune -f
+```
+
+To remove **everything** (containers, images, networks, volumes):
+
+```bash
+docker system prune -a --volumes
+```
+
+⚠️ This affects **all Docker projects on the system**, not just this one.
+
+---
+
+### ✅ Cleanup Verification
+
+After cleanup, verify everything is gone:
+
+```bash
+# LocalStack should show no resources
+aws --endpoint-url=http://localhost:4566 s3 ls
+aws --endpoint-url=http://localhost:4566 dynamodb list-tables
+
+# Terraform should show no managed resources
+cd terraform
+tflocal plan -var-file=environments/localstack.tfvars
+```
+
+Expected output:
+
+```
+No changes. Infrastructure is up-to-date.
+```
+
+
+
+
+
+
+
+
+
+
+
