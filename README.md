@@ -287,6 +287,8 @@ terraform plan -var-file="environments/localstack.tfvars"
 
 **⚠️ LocalStack Note:** Due to known Terraform + LocalStack compatibility issues (S3 bucket creation hangs), the full infrastructure deployment on LocalStack has limitations. For **production AWS**, the full deployment works perfectly.
 
+> **Reference:** See [LocalStack Terraform Integration Docs](https://docs.localstack.cloud/user-guide/integrations/terraform/) and [LocalStack GitHub Issues](https://github.com/localstack/localstack/issues?q=is%3Aissue+terraform+s3) for details on known limitations.
+
 **For LocalStack testing**, manually create resources to test functionality:
 
 ```bash
@@ -552,6 +554,17 @@ docker-compose down
 # Remove volumes (optional)
 docker-compose down -v
 ```
+
+### Known LocalStack Limitations
+
+**Terraform + LocalStack Compatibility Issues:**
+- S3 bucket creation via Terraform may hang indefinitely
+- This is a known compatibility gap between Terraform AWS Provider and LocalStack's S3 emulation
+- See [LocalStack Terraform Docs](https://docs.localstack.cloud/user-guide/integrations/terraform/) for official workarounds
+- LocalStack provides `tflocal` wrapper script as alternative approach
+- Manual resource creation via AWS CLI works reliably
+
+**Production AWS:** All Terraform modules work without issues on real AWS infrastructure.
 
 ---
 
