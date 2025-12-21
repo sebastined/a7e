@@ -37,6 +37,9 @@ provider "aws" {
   skip_credentials_validation = var.use_localstack
   skip_metadata_api_check     = var.use_localstack
   skip_requesting_account_id  = var.use_localstack
+  
+  # Required for LocalStack S3 compatibility
+  s3_use_path_style = var.use_localstack
 
   # Default tags applied to all resources
   default_tags {
