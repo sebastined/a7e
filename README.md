@@ -12,7 +12,6 @@ The work is intentionally scoped to what can be completed within **1–2 hours**
 .
 ├── terraform/        # Terraform-based infrastructure (Lambda, S3, DynamoDB)
 ├── cloudformation/   # CloudFormation stack with security hardening
-├── TEST_COMMANDS.sh  # Automated validation script
 └── README.md         # This document
 ```
 
