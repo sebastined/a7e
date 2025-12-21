@@ -9,11 +9,41 @@ Parameters:
     ConstraintDescription: Bucket name must start/end with letter or number and contain only lowercase letters, numbers, hyphens.
 
 Resources:
+  # KMS Key for S3 encryption
+  S3EncryptionKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS key for S3 bucket encryption
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: Allow S3 to use the key
+            Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action:
+              - 'kms:Decrypt'
+              - 'kms:GenerateDataKey'
+            Resource: '*'
+
+  S3EncryptionKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub 'alias/${BucketName}-s3-key'
+      TargetKeyId: !Ref S3EncryptionKey
+
   # Bucket for storing access logs
   AccentureLogsBucket:
     Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
     Properties:
-      BucketName: !Sub ${BucketName}-logs
+      BucketName: !Sub '${BucketName}-logs'
       AccessControl: LogDeliveryWrite
       VersioningConfiguration:
         Status: Enabled
@@ -25,13 +55,22 @@ Resources:
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
+              SSEAlgorithm: 'aws:kms'
+              KMSMasterKeyID: !GetAtt S3EncryptionKey.Arn
+            BucketKeyEnabled: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldLogs
+            Status: Enabled
+            ExpirationInDays: 90
+            NoncurrentVersionExpirationInDays: 30
 
   # Main S3 bucket
   AccentureS3Bucket:
     Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
     Properties:
-      BucketName: !Sub ${BucketName}-s3
+      BucketName: !Sub '${BucketName}-s3'
       VersioningConfiguration:
         Status: Enabled
       PublicAccessBlockConfiguration:
@@ -42,10 +81,51 @@ Resources:
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
+              SSEAlgorithm: 'aws:kms'
+              KMSMasterKeyID: !GetAtt S3EncryptionKey.Arn
+            BucketKeyEnabled: true
       LoggingConfiguration:
         DestinationBucketName: !Ref AccentureLogsBucket
         LogFilePrefix: access-logs/
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireOldObjects
+            Status: Enabled
+            ExpirationInDays: 90
+            NoncurrentVersionExpirationInDays: 30
+          - Id: AbortIncompleteMultipartUpload
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+
+  # S3 Bucket Policy to enforce SSL/TLS
+  AccentureS3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref AccentureS3Bucket
+      PolicyText:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: EnforceSSLOnly
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt AccentureS3Bucket.Arn
+              - !Sub '${AccentureS3Bucket.Arn}/*'
+            Condition:
+              Bool:
+                'aws:SecureTransport': 'false'
+
+  # SNS Topic for security alerts
+  SecurityAlertsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: S3 and DynamoDB Security Alerts
+      KmsMasterKeyId: alias/aws/sns
+      Tags:
+        - Key: Purpose
+          Value: Security Monitoring
 
 Outputs:
   S3BucketARN:
@@ -55,4 +135,13 @@ Outputs:
   LogsBucketARN:
     Description: ARN of the logs bucket
     Value: !GetAtt AccentureLogsBucket.Arn
+
+  KMSKeyArn:
+    Description: ARN of the KMS encryption key
+    Value: !GetAtt S3EncryptionKey.Arn
+
+  SecurityAlertsTopicArn:
+    Description: ARN of the SNS topic for security alerts
+    Value: !Ref SecurityAlertsTopic
+
 

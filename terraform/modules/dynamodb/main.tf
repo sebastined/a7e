@@ -40,15 +40,34 @@ variable "tags" {
 }
 
 resource "aws_dynamodb_table" "main" {
-  count        = var.create ? 1 : 0
-  name         = var.name
+  count  = var.create ? 1 : 0
+  name   = var.name
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "id"
-  tags         = var.tags
+  range_key    = "upload_timestamp"
+  tags   = var.tags
 
   attribute {
     name = "id"
     type = "S"
+  }
+
+  attribute {
+    name = "upload_timestamp"
+    type = "S"
+  }
+
+  attribute {
+    name = "filename"
+    type = "S"
+  }
+
+  # Global Secondary Index for querying by filename
+  global_secondary_index {
+    name            = "filename-upload-index"
+    hash_key        = "filename"
+    range_key       = "upload_timestamp"
+    projection_type = "ALL"
   }
 
   server_side_encryption {

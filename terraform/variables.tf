@@ -115,3 +115,9 @@ variable "budget_alert_threshold" {
   type        = number
   default     = 80
 }
+
+variable "alert_email" {
+  description = "Email address for SNS alerts and alarms"
+  type        = string
+  default     = ""
+}

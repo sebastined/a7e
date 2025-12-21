@@ -95,9 +95,10 @@ resource "aws_iam_role" "lambda_exec" {
   })
 }
 
-resource "aws_iam_policy" "lambda_policy" {
-  name = "${var.lambda_role_name}-policy"
-  tags = var.tags
+resource "aws_iam_role_policy" "lambda_policy" {
+  name = "${var.lambda_role_name}-inline"
+  role = aws_iam_role.lambda_exec.id
+
   policy = jsonencode({
     Version   = "2012-10-17",
     Statement = local.statements
@@ -107,13 +108,6 @@ resource "aws_iam_policy" "lambda_policy" {
 resource "aws_iam_role_policy_attachment" "lambda_attach_cloudwatch" {
   role       = aws_iam_role.lambda_exec.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
-
-resource "aws_iam_role_policy" "lambda_inline_policy" {
-  name = "${var.lambda_role_name}-inline"
-  role = aws_iam_role.lambda_exec.id
-
-  policy = aws_iam_policy.lambda_policy.policy
 }
 
 resource "aws_iam_role" "sfn_role" {

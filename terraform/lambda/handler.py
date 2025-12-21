@@ -54,12 +54,13 @@ def lambda_handler(event, context):
                     print(f"Warning: Skipping record with missing bucket or key")
                     continue
                 
-                # Store metadata in DynamoDB
+                # Store metadata in DynamoDB with required attributes
                 item = {
                     'id': {'S': key},
+                    'filename': {'S': key.split('/')[-1]},  # Extract filename from key
+                    'upload_timestamp': {'S': datetime.utcnow().isoformat()},
                     'bucket': {'S': bucket},
                     'size': {'N': str(size)},
-                    'timestamp': {'S': datetime.utcnow().isoformat()},
                     'processed': {'BOOL': True}
                 }
                 

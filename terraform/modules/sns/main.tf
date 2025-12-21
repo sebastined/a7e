@@ -15,6 +15,12 @@ variable "tags" {
   default     = {}
 }
 
+variable "email_endpoint" {
+  description = "Email endpoint for CloudWatch alarms subscription"
+  type        = string
+  default     = ""
+}
+
 resource "aws_sns_topic" "main" {
   name              = var.name
   kms_master_key_id = var.kms_key_arn != "" ? var.kms_key_arn : null
@@ -22,9 +28,10 @@ resource "aws_sns_topic" "main" {
 }
 
 resource "aws_sns_topic_subscription" "cloudwatch_alarms" {
+  count     = var.email_endpoint != "" ? 1 : 0
   topic_arn = aws_sns_topic.main.arn
   protocol  = "email"
-  endpoint  = "alerts@example.com" # Should be configured via variable in production
+  endpoint  = var.email_endpoint
 }
 
 output "arn" {

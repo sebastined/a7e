@@ -49,6 +49,7 @@ module "sns" {
   source      = "./modules/sns"
   name        = "${local.prefix}-security-alerts"
   kms_key_arn = length(module.kms) > 0 ? module.kms[0].key_arn : ""
+  email_endpoint = var.alert_email
   tags = merge(var.common_tags, {
     Environment = var.env
     Purpose     = "Security and operational alerts"
