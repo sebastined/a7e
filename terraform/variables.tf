@@ -43,7 +43,7 @@ variable "use_local_kms" {
 variable "use_localstack" {
   description = "Run resources against LocalStack endpoints when true"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "localstack_endpoint" {
@@ -65,7 +65,7 @@ variable "enable_secrets" {
 }
 
 variable "example_secret_value" {
-  description = "Example secret value for the demo SecureString. Leave empty to skip creating a secret." 
+  description = "Example secret value for the demo SecureString. Leave empty to skip creating a secret."
   type        = string
   default     = ""
 }
@@ -85,15 +85,33 @@ variable "force_create_on_localstack" {
 variable "env" {
   description = "Environment name (used for tags)"
   type        = string
-  default     = "local"
+  default     = "development"
 }
 
 variable "common_tags" {
   description = "Map of tags to apply to all resources via provider default_tags"
   type        = map(string)
-  default     = {
-    Owner       = "DevOps Team"
-    Compliance  = "Required"
-    Backup      = "Daily"
+  default = {
+    Owner      = "DevOps Team"
+    Compliance = "Required"
+    Backup     = "Daily"
   }
+}
+
+variable "cost_center" {
+  description = "Cost center for billing allocation"
+  type        = string
+  default     = "Engineering"
+}
+
+variable "budget_limit" {
+  description = "Monthly budget limit in USD"
+  type        = number
+  default     = 100
+}
+
+variable "budget_alert_threshold" {
+  description = "Budget alert threshold percentage"
+  type        = number
+  default     = 80
 }

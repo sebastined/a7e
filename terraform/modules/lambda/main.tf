@@ -124,7 +124,7 @@ resource "aws_cloudwatch_log_group" "lambda" {
 
 resource "aws_sqs_queue" "dlq" {
   name                      = "${var.name}-dlq"
-  message_retention_seconds = 1209600  # 14 days
+  message_retention_seconds = 1209600 # 14 days
   tags                      = var.tags
 }
 
@@ -175,7 +175,7 @@ resource "aws_cloudwatch_metric_alarm" "duration" {
   namespace           = "AWS/Lambda"
   period              = 300
   statistic           = "Average"
-  threshold           = var.timeout * 1000 * 0.8  # Alert at 80% of timeout
+  threshold           = var.timeout * 1000 * 0.8 # Alert at 80% of timeout
   alarm_description   = "Lambda function ${var.name} duration approaching timeout"
   alarm_actions       = var.alarm_actions
   treat_missing_data  = "notBreaching"

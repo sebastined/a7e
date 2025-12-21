@@ -86,6 +86,7 @@ def lambda_handler(event, context):
                             Subject='Lambda Processing Error',
                             Message=f"Error processing S3 record: {str(record_error)}\nRecord: {json.dumps(record)}"
                         )
+                        print(f"SNS alert sent for record error")
                     except Exception as sns_error:
                         print(f"Failed to send SNS notification: {str(sns_error)}")
                 continue
@@ -113,6 +114,7 @@ def lambda_handler(event, context):
                     Subject='Critical Lambda Error',
                     Message=error_msg
                 )
+                print(f"Critical error SNS alert sent")
             except Exception as sns_error:
                 print(f"Failed to send critical error notification: {str(sns_error)}")
         

@@ -20,6 +20,11 @@ variable "tags" {
   default     = {}
 }
 
+variable "region" {
+  description = "AWS region for service conditions"
+  type        = string
+}
+
 resource "aws_kms_key" "main" {
   count               = var.create ? 1 : 0
   description         = "KMS key for ${var.alias}"
@@ -35,8 +40,32 @@ resource "aws_kms_key" "main" {
         Principal = {
           AWS = "arn:aws:iam::${var.account_id}:root"
         }
-        Action   = "kms:*"
+        Action = [
+          "kms:Create*",
+          "kms:Describe*",
+          "kms:Enable*",
+          "kms:List*",
+          "kms:Put*",
+          "kms:Update*",
+          "kms:Revoke*",
+          "kms:Disable*",
+          "kms:Get*",
+          "kms:Delete*",
+          "kms:ScheduleKeyDeletion",
+          "kms:CancelKeyDeletion"
+        ]
         Resource = "*"
+        Condition = {
+          StringEquals = {
+            "kms:ViaService" = [
+              "s3.${var.region}.amazonaws.com",
+              "dynamodb.${var.region}.amazonaws.com",
+              "sns.${var.region}.amazonaws.com",
+              "ssm.${var.region}.amazonaws.com",
+              "logs.${var.region}.amazonaws.com"
+            ]
+          }
+        }
       },
       {
         Sid    = "Allow services to use the key"

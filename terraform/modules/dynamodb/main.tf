@@ -40,11 +40,11 @@ variable "tags" {
 }
 
 resource "aws_dynamodb_table" "main" {
-  count          = var.create ? 1 : 0
-  name           = var.name
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "id"
-  tags           = var.tags
+  count        = var.create ? 1 : 0
+  name         = var.name
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "id"
+  tags         = var.tags
 
   attribute {
     name = "id"

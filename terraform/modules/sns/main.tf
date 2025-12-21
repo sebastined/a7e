@@ -24,7 +24,7 @@ resource "aws_sns_topic" "main" {
 resource "aws_sns_topic_subscription" "cloudwatch_alarms" {
   topic_arn = aws_sns_topic.main.arn
   protocol  = "email"
-  endpoint  = "alerts@example.com"  # Should be configured via variable in production
+  endpoint  = "alerts@example.com" # Should be configured via variable in production
 }
 
 output "arn" {

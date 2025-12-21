@@ -32,7 +32,7 @@ variable "account_id" {
 }
 
 variable "tags" {
-  type = map(string)
+  type    = map(string)
   default = {}
 }
 
@@ -56,20 +56,20 @@ locals {
 
   s3_statement = [
     {
-      Effect = "Allow"
-      Action = ["s3:GetObject", "s3:ListBucket"]
+      Effect   = "Allow"
+      Action   = ["s3:GetObject", "s3:ListBucket"]
       Resource = [var.s3_bucket_arn, "${var.s3_bucket_arn}/*"]
     }
   ]
 
   logs_statement = [
     var.log_group_arn != "" ? {
-      Effect = "Allow"
-      Action = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
+      Effect   = "Allow"
+      Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
       Resource = var.log_group_arn
-    } : {
-      Effect = "Allow"
-      Action = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
+      } : {
+      Effect   = "Allow"
+      Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
       Resource = "arn:aws:logs:${var.region}:${var.account_id}:log-group:/aws/lambda/*"
     }
   ]
@@ -99,7 +99,7 @@ resource "aws_iam_policy" "lambda_policy" {
   name = "${var.lambda_role_name}-policy"
   tags = var.tags
   policy = jsonencode({
-    Version = "2012-10-17",
+    Version   = "2012-10-17",
     Statement = local.statements
   })
 }

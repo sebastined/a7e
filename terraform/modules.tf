@@ -1,12 +1,13 @@
 data "aws_caller_identity" "current" {}
 
 module "kms" {
-  source = "./modules/kms"
-  count  = var.use_localstack ? 0 : 1
-  alias  = "${local.prefix}-main"
+  source     = "./modules/kms"
+  count      = var.use_localstack ? 0 : 1
+  alias      = "${local.prefix}-main"
   account_id = data.aws_caller_identity.current.account_id
-  create = true
-  tags   = merge(var.common_tags, { 
+  region     = var.region
+  create     = true
+  tags = merge(var.common_tags, {
     Name        = "${local.prefix}-kms-key"
     Environment = var.env
     Purpose     = "Data encryption"
@@ -18,7 +19,7 @@ module "s3" {
   bucket_name     = "${local.prefix}-files"
   expiration_days = var.expiration_days
   kms_key_arn     = length(module.kms) > 0 ? module.kms[0].key_arn : ""
-  tags            = merge(var.common_tags, { 
+  tags = merge(var.common_tags, {
     Name        = "${local.prefix}-files"
     Environment = var.env
     Purpose     = "File storage"
@@ -33,10 +34,10 @@ module "dynamodb" {
   enable_pitr = var.use_localstack ? false : true
   # Normally we skip creating the table in LocalStack because of compatibility and long waits.
   # Use force_create_on_localstack to override and try creating the table on LocalStack (for testing).
-  create      = var.use_localstack ? (var.force_create_on_localstack ? true : false) : true
-  create_timeout = var.use_localstack ? "2m" : "10m"
+  create                     = var.use_localstack ? (var.force_create_on_localstack ? true : false) : true
+  create_timeout             = var.use_localstack ? "2m" : "10m"
   force_create_on_localstack = var.force_create_on_localstack
-  tags        = merge(var.common_tags, { 
+  tags = merge(var.common_tags, {
     Name        = "${local.prefix}-files-table"
     Environment = var.env
     Purpose     = "File metadata storage"
@@ -45,10 +46,10 @@ module "dynamodb" {
 }
 
 module "sns" {
-  source = "./modules/sns"
-  name   = "${local.prefix}-security-alerts"
+  source      = "./modules/sns"
+  name        = "${local.prefix}-security-alerts"
   kms_key_arn = length(module.kms) > 0 ? module.kms[0].key_arn : ""
-  tags   = merge(var.common_tags, { 
+  tags = merge(var.common_tags, {
     Environment = var.env
     Purpose     = "Security and operational alerts"
   })
@@ -61,12 +62,12 @@ module "iam" {
   sfn_role_name    = "${local.prefix}-sfn-exec"
 
   # If DynamoDB is not created by Terraform (e.g., LocalStack), fall back to a constructed ARN
-  dynamodb_arn = var.use_localstack && !var.force_create_on_localstack ? "arn:aws:dynamodb:${var.region}:${data.aws_caller_identity.current.account_id}:table/${var.dynamodb_table_name}" : module.dynamodb.table_arn
+  dynamodb_arn  = var.use_localstack && !var.force_create_on_localstack ? "arn:aws:dynamodb:${var.region}:${data.aws_caller_identity.current.account_id}:table/${var.dynamodb_table_name}" : module.dynamodb.table_arn
   s3_bucket_arn = module.s3.bucket_arn
   sns_arn       = module.sns.arn
   region        = var.region
   account_id    = data.aws_caller_identity.current.account_id
-  tags = merge(var.common_tags, { 
+  tags = merge(var.common_tags, {
     Environment = var.env
     Purpose     = "IAM roles and policies"
   })
@@ -75,7 +76,7 @@ module "iam" {
 # Create Step Functions policy now that Lambda is in the graph to avoid circular dependency
 resource "aws_iam_policy" "sfn_policy" {
   name = "${local.prefix}-sfn-policy"
-  tags = merge(var.common_tags, { 
+  tags = merge(var.common_tags, {
     Environment = var.env
     Purpose     = "Step Functions execution policy"
   })
@@ -84,13 +85,13 @@ resource "aws_iam_policy" "sfn_policy" {
     Version = "2012-10-17",
     Statement = [
       {
-        Effect = "Allow",
-        Action = ["lambda:InvokeFunction"],
+        Effect   = "Allow",
+        Action   = ["lambda:InvokeFunction"],
         Resource = [module.lambda.function_arn]
       },
       {
-        Effect = "Allow",
-        Action = ["sns:Publish"],
+        Effect   = "Allow",
+        Action   = ["sns:Publish"],
         Resource = [module.sns.arn]
       }
     ]
@@ -103,25 +104,25 @@ resource "aws_iam_role_policy_attachment" "sfn_attach" {
 }
 
 module "lambda" {
-  source      = "./modules/lambda"
-  name        = "${local.prefix}-file-processor"
-  source_dir  = "${path.module}/lambda"
-  handler     = var.lambda_handler
-  runtime     = var.lambda_runtime
-  role_arn    = module.iam.lambda_role_arn
+  source        = "./modules/lambda"
+  name          = "${local.prefix}-file-processor"
+  source_dir    = "${path.module}/lambda"
+  handler       = var.lambda_handler
+  runtime       = var.lambda_runtime
+  role_arn      = module.iam.lambda_role_arn
   log_retention = 14
   alarm_actions = [module.sns.arn]
   tracing_mode  = "Active"
   environment = {
     # Use configured table name (works even when DynamoDB is not created by Terraform on LocalStack)
-    TABLE_NAME = var.dynamodb_table_name
-    REGION     = var.region
-    SNS_TOPIC  = module.sns.arn
+    TABLE_NAME       = var.dynamodb_table_name
+    REGION           = var.region
+    SNS_TOPIC        = module.sns.arn
     AWS_ENDPOINT_URL = var.use_localstack ? var.localstack_endpoint : ""
   }
-  use_localstack = var.use_localstack
+  use_localstack             = var.use_localstack
   force_create_on_localstack = var.force_create_on_localstack
-  tags = merge(var.common_tags, { 
+  tags = merge(var.common_tags, {
     Environment = var.env
     Purpose     = "File processing"
     Runtime     = var.lambda_runtime
@@ -130,24 +131,36 @@ module "lambda" {
 }
 
 # store SNS ARN in parameter store (simple secret/config management)
-resource "aws_ssm_parameter" "sns_topic" {
-  name  = "/a7e/${local.prefix}/sns_topic_arn"
-  type  = "String"
-  value = module.sns.arn
+module "sns_parameter" {
+  source      = "./modules/secrets"
+  name        = "/a7e/${local.prefix}/sns_topic_arn"
+  type        = "String"
+  value       = module.sns.arn
+  description = "SNS topic ARN for notifications"
+  tags = merge(var.common_tags, {
+    Environment = var.env
+    Purpose     = "Configuration parameter"
+  })
 }
 
 # Optional example secure parameter to demonstrate secret management (disabled by default)
-resource "aws_ssm_parameter" "app_secret" {
-  count  = var.enable_secrets && var.example_secret_value != "" ? 1 : 0
-  name   = var.example_secret_name != "" ? var.example_secret_name : "/a7e/${var.prefix}/app_secret"
-  type   = "SecureString"
-  value  = var.example_secret_value
-  key_id = length(module.kms) > 0 ? module.kms[0].key_arn : null
-  tags   = merge(var.common_tags, { Environment = var.env })
+module "app_secret" {
+  source      = "./modules/secrets"
+  count       = var.enable_secrets && var.example_secret_value != "" ? 1 : 0
+  name        = var.example_secret_name != "" ? var.example_secret_name : "/a7e/${var.prefix}/app_secret"
+  type        = "SecureString"
+  value       = var.example_secret_value
+  description = "Example application secret"
+  kms_key_id  = length(module.kms) > 0 ? module.kms[0].key_id : ""
+  tags = merge(var.common_tags, {
+    Environment = var.env
+    Purpose     = "Application secret"
+    DataClass   = "Confidential"
+  })
 }
 
 output "app_secret_parameter_name" {
-  value = length(aws_ssm_parameter.app_secret) > 0 ? aws_ssm_parameter.app_secret[0].name : ""
+  value = length(module.app_secret) > 0 ? module.app_secret[0].parameter_name : ""
 }
 
 resource "aws_s3_bucket_notification" "s3_to_lambda" {
@@ -159,4 +172,24 @@ resource "aws_s3_bucket_notification" "s3_to_lambda" {
   }
 
   depends_on = [module.lambda]
+}
+
+# Budget for cost control (skip for LocalStack)
+module "budget" {
+  source = "./modules/budget"
+  count  = var.use_localstack ? 0 : 1
+
+  budget_name     = "${local.prefix}-monthly-budget"
+  budget_limit    = var.budget_limit
+  alert_threshold = var.budget_alert_threshold
+  sns_topic_arn   = module.sns.arn
+
+  cost_filters = {
+    Project = [var.prefix]
+  }
+
+  tags = merge(var.common_tags, {
+    Environment = var.env
+    Purpose     = "Cost control"
+  })
 }

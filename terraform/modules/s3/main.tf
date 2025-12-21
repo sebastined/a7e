@@ -62,6 +62,10 @@ resource "aws_s3_bucket_lifecycle_configuration" "main" {
     id     = "expire-old-objects"
     status = "Enabled"
 
+    filter {
+      prefix = ""
+    }
+
     expiration {
       days = var.expiration_days
     }
@@ -75,13 +79,17 @@ resource "aws_s3_bucket_lifecycle_configuration" "main" {
     id     = "abort-incomplete-multipart"
     status = "Enabled"
 
+    filter {
+      prefix = ""
+    }
+
     abort_incomplete_multipart_upload {
       days_after_initiation = 7
     }
   }
 }
 
-resource "aws_s3_bucket_logging" {
+resource "aws_s3_bucket_logging" "main" {
   bucket = aws_s3_bucket.main.id
 
   target_bucket = aws_s3_bucket.main.id

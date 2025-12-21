@@ -19,18 +19,18 @@ provider "aws" {
 
   # Only use endpoint override for LocalStack
   endpoints {
-    s3             = var.use_localstack ? var.localstack_endpoint : null
-    dynamodb       = var.use_localstack ? var.localstack_endpoint : null
-    lambda         = var.use_localstack ? var.localstack_endpoint : null
-    sns            = var.use_localstack ? var.localstack_endpoint : null
-    sqs            = var.use_localstack ? var.localstack_endpoint : null
-    iam            = var.use_localstack ? var.localstack_endpoint : null
-    sts            = var.use_localstack ? var.localstack_endpoint : null
-    cloudwatch     = var.use_localstack ? var.localstack_endpoint : null
-    logs           = var.use_localstack ? var.localstack_endpoint : null
-    kms            = var.use_localstack ? var.localstack_endpoint : null
-    ssm            = var.use_localstack ? var.localstack_endpoint : null
-    states         = var.use_localstack ? var.localstack_endpoint : null
+    s3            = var.use_localstack ? var.localstack_endpoint : null
+    dynamodb      = var.use_localstack ? var.localstack_endpoint : null
+    lambda        = var.use_localstack ? var.localstack_endpoint : null
+    sns           = var.use_localstack ? var.localstack_endpoint : null
+    sqs           = var.use_localstack ? var.localstack_endpoint : null
+    iam           = var.use_localstack ? var.localstack_endpoint : null
+    sts           = var.use_localstack ? var.localstack_endpoint : null
+    cloudwatch    = var.use_localstack ? var.localstack_endpoint : null
+    logs          = var.use_localstack ? var.localstack_endpoint : null
+    kms           = var.use_localstack ? var.localstack_endpoint : null
+    ssm           = var.use_localstack ? var.localstack_endpoint : null
+    stepfunctions = var.use_localstack ? var.localstack_endpoint : null
   }
 
   # Disable credential validation for LocalStack
@@ -46,7 +46,7 @@ provider "aws" {
         ManagedBy   = "Terraform"
         Project     = var.prefix
         Environment = var.env
-        CostCenter  = "Engineering"
+        CostCenter  = var.cost_center
       }
     )
   }
