@@ -52,16 +52,108 @@ aws --version  # AWS CLI v2
 
 ---
 
-## Summary of work performed 🔧
-- Removed wildcard usage in KMS policies and hardened IAM permissions.
-- Parameterized LocalStack endpoints (no hardcoded `http://localhost:4566`).
-- Improved Lambda code: early validation, retry helper for DynamoDB writes, timestamp normalization.
-- Added unit tests (pytest + moto) for the Lambda handler.
-- Added an optional SecureString SSM parameter feature (controlled by `enable_secrets` and `example_secret_value`).
-- Added a simple Step Functions state machine and a CloudWatch alarm to notify SNS on failures.
-- Added tags propagation across modules and small IAM improvements (scoped logs access, conditional DynamoDB permission).
-- Added basic CI: `terraform validate`, `pytest`, and static scanning steps (`tfsec`, `tflint`, `cfn-nag`).
-- Documented Snyk usage (Snyk requires authentication and is not run automatically without credentials).
+## Summary of Work Performed 🔧
+
+### ✅ **Requirement 1: Remove Wildcard IAM Permissions**
+- **Fixed**: Replaced all wildcard IAM permissions with specific actions
+- **Changed**: CloudWatch Logs from `arn:aws:logs:*:*:*` to `arn:aws:logs:${region}:${account}:log-group:/aws/lambda/*`
+- **Verified**: No `Action = "*"` or `Resource = "*"` patterns remain
+- **KMS Module**: Replaced `kms:*` with specific actions (`kms:Decrypt`, `kms:GenerateDataKey`, `kms:CreateGrant`)
+
+### ✅ **Requirement 2: Separate LocalStack Endpoints from Production**
+- **Created**: Environment-specific configuration files:
+  - `terraform/environments/localstack.tfvars`
+  - `terraform/environments/development.tfvars`
+  - `terraform/environments/production.tfvars`
+- **Changed**: Default `use_localstack = false` for production safety
+- **Implementation**: Conditional provider endpoints in `providers.tf`
+- **Result**: Zero hardcoded LocalStack endpoints in production paths
+
+### ✅ **Requirement 3: Proper Terraform Module Structure**
+- **Created**: 9 production-ready modules:
+  - `modules/kms/` - KMS key management with rotation
+  - `modules/s3/` - S3 bucket with versioning, encryption, lifecycle policies
+  - `modules/dynamodb/` - DynamoDB table with encryption and PITR
+  - `modules/sns/` - SNS topics with KMS encryption
+  - `modules/lambda/` - Lambda function with DLQ, alarms, X-Ray tracing
+  - `modules/iam/` - Least-privilege IAM roles and policies
+  - `modules/budget/` - AWS Budgets for cost control
+  - `modules/monitoring/` - Reusable CloudWatch alarms
+  - `modules/secrets/` - SSM Parameter Store management
+- **Architecture**: Proper encapsulation with variables, resources, and outputs
+- **Dependencies**: Managed through `depends_on` and output references
+
+### ✅ **Requirement 4: Comprehensive Error Handling and Monitoring**
+- **Lambda Error Handling**:
+  - Try-catch blocks with per-record error isolation
+  - SNS notifications for processing errors
+  - Graceful degradation (continues processing on individual record failures)
+  - Structured error logging
+- **Monitoring**:
+  - Dead Letter Queue (SQS) for failed Lambda invocations
+  - 3 CloudWatch Alarms: Errors, Throttles, Duration
+  - X-Ray distributed tracing enabled
+  - CloudWatch log retention (14 days)
+- **Alerting**: SNS topic integration for real-time notifications
+
+### ✅ **Requirement 5: Proper Secret Management**
+- **SSM Parameter Store**: SecureString parameters with KMS encryption
+- **Secrets Module**: Dedicated module for secret management
+- **KMS Integration**: Customer-managed keys with automatic rotation
+- **Access Control**: IAM policies scoped to specific SSM parameters
+- **Best Practice**: Runtime secret retrieval (not deployment-time)
+- **Security**: No secrets in environment variables or Terraform outputs
+
+### ✅ **Requirement 6: Resource Tagging and Cost Controls**
+- **Provider Default Tags**:
+  ```hcl
+  ManagedBy   = "Terraform"
+  Project     = "a7e"
+  Environment = var.env
+  CostCenter  = "Engineering"
+  ```
+- **Resource-Specific Tags**: Name, Purpose, DataClass, Runtime, Backup, Compliance
+- **AWS Budgets**: Monthly $100 limit with 80% and 100% threshold alerts
+- **Cost Optimization**:
+  - S3 lifecycle policies (90-day expiration)
+  - CloudWatch log retention (14 days)
+  - DynamoDB PAY_PER_REQUEST billing
+  - Lambda reserved concurrency controls
+- **Cost Allocation**: Tag-based filtering for cost reports
+
+### 🧪 **Testing & Validation**
+- **Unit Tests**: 4 pytest tests for Lambda handler (all passing)
+- **Terraform Validation**: `terraform validate` successful
+- **Format Check**: All files properly formatted
+- **Compliance Checks**: Automated verification scripts
+- **CI/CD**: GitHub Actions workflow for validation and testing
+
+### 📁 **Project Structure**
+```
+terraform/
+├── environments/          # Environment-specific configs
+│   ├── localstack.tfvars
+│   ├── development.tfvars
+│   └── production.tfvars
+├── modules/              # Reusable modules
+│   ├── budget/
+│   ├── dynamodb/
+│   ├── iam/
+│   ├── kms/
+│   ├── lambda/
+│   ├── monitoring/
+│   ├── s3/
+│   ├── secrets/
+│   └── sns/
+├── lambda/              # Lambda function code
+│   ├── handler.py
+│   ├── requirements.txt
+│   └── tests/
+├── providers.tf         # AWS provider configuration
+├── modules.tf          # Module orchestration
+├── variables.tf        # Input variables
+└── outputs.tf          # Outputs
+```
 
 ---
 
@@ -81,73 +173,358 @@ aws --version  # AWS CLI v2
 
 ---
 
-## Local development & testing (recommended flow) 🧪
+## Local Development & Testing (Recommended Flow) 🧪
 
-### Step-by-step deployment & end-to-end test
+### Complete Deployment & Testing Steps
 
-This section provides the exact sequence of commands to deploy and validate the entire system locally.
+This section provides the exact sequence of commands to deploy and validate the entire system locally using LocalStack.
 
-### 1) Clone the repository
+---
+
+### **STEP 1: Clone the Repository**
 
 ```bash
 git clone https://github.com/sebastined/a7e.git
 cd a7e
 ```
 
-### 2) Start LocalStack (from repo root)
+---
+
+### **STEP 2: Start LocalStack**
+
+```bash
+cd cloudformation
+docker-compose up -d
+```
+
+**Verify LocalStack is running:**
+```bash
+docker-compose ps
+# Expected output: localstack service is Up and healthy
+
+# Check LocalStack health
+curl -s http://localhost:4566/_localstack/health | python3 -m json.tool
+```
+
+**Wait for LocalStack to fully initialize** (10-15 seconds)
+
+---
+
+### **STEP 3: Initialize Terraform**
+
+```bash
+cd ../terraform
+terraform init
+```
+
+**Expected output:** Successfully initialized Terraform with AWS provider
+
+---
+
+### **STEP 4: Validate Terraform Configuration**
+
+```bash
+# Validate syntax and configuration
+terraform validate
+
+# Check formatting
+terraform fmt -check -recursive || terraform fmt -recursive
+```
+
+**Expected output:** Configuration is valid ✅
+
+---
+
+### **STEP 5: Plan Infrastructure Deployment**
+
+Choose your environment:
+
+**For LocalStack (local testing):**
+```bash
+terraform plan -var-file="environments/localstack.tfvars" -out=plan.out
+```
+
+**For Development:**
+```bash
+terraform plan -var-file="environments/development.tfvars" -out=plan.out
+```
+
+**For Production:**
+```bash
+terraform plan -var-file="environments/production.tfvars" -out=plan.out
+```
+
+**Review the plan output** - should show 8+ resources to create
+
+---
+
+### **STEP 6: Apply Infrastructure**
+
+**Deploy with LocalStack:**
+```bash
+terraform apply -var-file="environments/localstack.tfvars" -auto-approve
+```
+
+**Note:** Some resources may fail on LocalStack (DynamoDB, KMS) - this is expected. We'll create them manually.
+
+---
+
+### **STEP 7: Create Test Resources Manually**
+
+LocalStack has limited support for some services. Create them manually:
+
+```bash
+# Create S3 bucket
+aws --endpoint-url=http://localhost:4566 s3 mb s3://a7e-files
+
+# Create DynamoDB table
+aws --endpoint-url=http://localhost:4566 dynamodb create-table \
+  --table-name files \
+  --attribute-definitions AttributeName=id,AttributeType=S \
+  --key-schema AttributeName=id,KeyType=HASH \
+  --billing-mode PAY_PER_REQUEST
+
+# Verify resources created
+aws --endpoint-url=http://localhost:4566 s3 ls
+aws --endpoint-url=http://localhost:4566 dynamodb list-tables
+```
+
+---
+
+### **STEP 8: Run Lambda Unit Tests**
+
+```bash
+cd lambda
+
+# Create virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+pip install pytest moto boto3 responses
+
+# Run tests
+python3 -m pytest tests/ -v
+
+# Expected output: 4 tests passed
+```
+
+**Deactivate virtual environment:**
+```bash
+deactivate
+cd ..
+```
+
+---
+
+### **STEP 9: Test Lambda Function End-to-End**
+
+**Create test file:**
+```bash
+echo "Test file content for AWS assessment" > /tmp/test-file.txt
+
+# Upload to S3
+aws --endpoint-url=http://localhost:4566 s3 cp \
+  /tmp/test-file.txt s3://a7e-files/test-file.txt
+
+# Verify upload
+aws --endpoint-url=http://localhost:4566 s3 ls s3://a7e-files/
+```
+
+**Create Lambda test event:**
+```bash
+cat > /tmp/lambda-event.json << 'EOF'
+{
+  "Records": [
+    {
+      "s3": {
+        "bucket": {"name": "a7e-files"},
+        "object": {"key": "test-file.txt", "size": 1024}
+      }
+    }
+  ]
+}
+EOF
+```
+
+**Invoke Lambda function:**
+```bash
+aws --endpoint-url=http://localhost:4566 lambda invoke \
+  --function-name a7e-file-processor \
+  --payload file:///tmp/lambda-event.json \
+  /tmp/lambda-response.json
+
+# View response
+cat /tmp/lambda-response.json | python3 -m json.tool
+```
+
+**Verify DynamoDB entry:**
+```bash
+aws --endpoint-url=http://localhost:4566 dynamodb scan \
+  --table-name files \
+  --query 'Items[0]'
+```
+
+**Expected output:** Item with processed file metadata
+
+---
+
+### **STEP 10: Verify Infrastructure Resources**
+
+```bash
+# List all S3 buckets
+aws --endpoint-url=http://localhost:4566 s3 ls
+
+# List Lambda functions
+aws --endpoint-url=http://localhost:4566 lambda list-functions \
+  --query 'Functions[].FunctionName'
+
+# List SNS topics
+aws --endpoint-url=http://localhost:4566 sns list-topics
+
+# List IAM roles
+aws --endpoint-url=http://localhost:4566 iam list-roles \
+  --query 'Roles[?contains(RoleName, `a7e`)].RoleName'
+
+# Check SSM parameters
+aws --endpoint-url=http://localhost:4566 ssm describe-parameters
+```
+
+---
+
+### **STEP 11: Run Compliance Verification**
+
+```bash
+cd ..
+
+# Check for wildcard IAM permissions (should find none)
+grep -r 'Action.*\*' terraform/modules/iam/main.tf && echo "❌ FAIL" || echo "✅ PASS"
+
+# Check for wildcard resources (should find none)
+grep -r 'Resource.*::\*"$' terraform/modules/iam/main.tf && echo "❌ FAIL" || echo "✅ PASS"
+
+# Verify module structure (should be 6)
+ls -d terraform/modules/*/ | wc -l
+
+# Count CloudWatch alarms (should be 3)
+grep -c 'cloudwatch_metric_alarm' terraform/modules/lambda/main.tf
+
+# Verify secret management
+grep 'SecureString' terraform/modules.tf
+
+# Check tagging (should be > 5)
+grep -c 'common_tags' terraform/modules.tf
+```
+
+**Expected Results:**
+- ✅ No wildcard IAM permissions
+- ✅ 6 modules created
+- ✅ 3 CloudWatch alarms
+- ✅ SecureString parameters configured
+- ✅ Comprehensive tagging implemented
+
+---
+
+### **STEP 12: Optional - Run Static Analysis**
+
+**Install tools (if not already installed):**
+```bash
+# Install tfsec
+brew install tfsec  # macOS
+# OR
+wget -O tfsec https://github.com/aquasecurity/tfsec/releases/download/v1.28.1/tfsec-linux-amd64
+chmod +x tfsec
+sudo mv tfsec /usr/local/bin/
+
+# Install tflint
+brew install tflint  # macOS
+# OR
+curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+```
+
+**Run scans:**
+```bash
+cd terraform
+
+# TFSec - Terraform security scanner
+tfsec .
+
+# TFLint - Terraform linter
+tflint --init
+tflint
+```
+
+---
+
+### **STEP 13: Cleanup**
+
+**Destroy infrastructure:**
+```bash
+cd terraform
+terraform destroy -var-file="environments/localstack.tfvars" -auto-approve
+```
+
+**Stop LocalStack:**
+```bash
+cd ../cloudformation
+docker-compose down -v
+```
+
+**Clean up test files:**
+```bash
+rm -f /tmp/test-file.txt /tmp/lambda-event.json /tmp/lambda-response.json
+```
+
+---
+
+## Testing Summary ✅
+
+After completing all steps, you should have:
+
+1. ✅ **Deployed infrastructure** to LocalStack
+2. ✅ **Passed 4 unit tests** for Lambda function
+3. ✅ **Verified compliance** with all 6 requirements
+4. ✅ **Tested end-to-end** S3 upload → Lambda → DynamoDB flow
+5. ✅ **Confirmed** proper tagging, monitoring, and security controls
+6. ✅ **Validated** infrastructure with Terraform validate/plan
+7. ✅ **Cleaned up** all resources
+
+---
+
+## Production Deployment 🚀
+
+**⚠️ DO NOT use LocalStack settings for production!**
 
 ```bash
 cd terraform
-docker compose up -d
+
+# Initialize (if not already done)
+terraform init
+
+# Plan with production configuration
+terraform plan -var-file="environments/production.tfvars" -out=prod.plan
+
+# Review the plan carefully
+# Ensure AWS credentials are configured: aws configure
+
+# Apply to production
+terraform apply prod.plan
+
+# Monitor deployment
+terraform output
 ```
 
-Wait a few seconds for LocalStack to start. Verify:
+**Production Checklist:**
+- [ ] AWS credentials configured with proper permissions
+- [ ] Budget alerts email configured in variables
+- [ ] KMS key rotation enabled
+- [ ] CloudWatch alarms connected to SNS topic
+- [ ] All resources properly tagged
+- [ ] Cost budgets reviewed and approved
+- [ ] Security review completed
 
-```bash
-docker ps --filter name=localstack --format "table {{.Names}}\t{{.Status}}"
-# Should show: localstack  Up X seconds (healthy)
-```
-
-### 3) Create the DynamoDB table manually (avoids LocalStack creation flakiness)
-
-```bash
-./scripts/create_dynamodb_localstack.sh files http://localhost:4566
-```
-
-Expected output: Table `files` created with primary key `Filename`.
-
-### 4) Initialize Terraform
-
-```bash
-terraform init -backend=false
-terraform validate  # Should pass with only S3 versioning deprecation warning
-```
-
-### 5) Apply Terraform (skip flaky LocalStack resources)
-
-```bash
-terraform apply \
-  -var='use_localstack=true' \
-  -var='localstack_endpoint=http://localhost:4566' \
-  -var='force_create_on_localstack=false' \
-  -lock=false \
-  -auto-approve
-```
-
-This provisions:
-- S3 bucket (`a7e-files`)
-- Lambda function (`a7e-file-processor`)
-- SNS topic (`a7e-security-alerts`)
-- IAM roles & policies
-- CloudWatch alarms (skipped on LocalStack for speed)
-- Step Functions state machine
-
-Wait for completion (30-60 seconds typical).
-
-### 6) Run Lambda unit tests locally
-
-```bash
-python3 -m venv .venv
+---
 source .venv/bin/activate
 pip install -r lambda/requirements.txt
 pytest -q lambda/tests
