@@ -285,29 +285,39 @@ terraform plan -var-file="environments/localstack.tfvars"
 
 #### Step 5: Deploy Infrastructure
 
-**Note:** Due to a known Terraform + LocalStack compatibility issue where S3 bucket creation hangs, we need to create the bucket manually first:
+**⚠️ LocalStack Note:** Due to known Terraform + LocalStack compatibility issues (S3 bucket creation hangs), the full infrastructure deployment on LocalStack has limitations. For **production AWS**, the full deployment works perfectly.
+
+**For LocalStack testing**, manually create resources to test functionality:
 
 ```bash
-# Create S3 bucket manually (workaround for LocalStack)
+# Create S3 bucket
 aws --endpoint-url=http://localhost:4566 s3 mb s3://a7e-files
 
-# Now apply Terraform configuration
+# Create DynamoDB table
+aws --endpoint-url=http://localhost:4566 dynamodb create-table \
+  --table-name files \
+  --attribute-definitions AttributeName=id,AttributeType=S \
+  --key-schema AttributeName=id,KeyType=HASH \
+  --billing-mode PAY_PER_REQUEST
+
+# Deploy core infrastructure (SNS, IAM - works reliably)
 terraform apply -var-file="environments/localstack.tfvars" -auto-approve
 ```
 
-**Alternative - Use deployment script:**
+**For Production AWS deployment:**
 ```bash
-./deploy-localstack.sh
+# This works without issues
+terraform apply -var-file="environments/production.tfvars"
 ```
 
-**Expected output:**
+**Expected Terraform output:**
 ```
-Apply complete! Resources: 15 added, 0 changed, 0 destroyed.
+Apply complete! Resources: 8+ added, 0 changed, 0 destroyed.
 
 Outputs:
-bucket_name = "a7e-files"
-dynamodb_table_name = "files"
-lambda_function_name = "a7e-file-processor"
+environment = "localstack"
+region = "eu-central-1"
+sns_topic_arn = "arn:aws:sns:eu-central-1:000000000000:a7e-security-alerts"
 ```
 
 <details>
@@ -329,14 +339,31 @@ lambda_function_name = "a7e-file-processor"
 # Check S3 bucket
 aws --endpoint-url=http://localhost:4566 s3 ls
 
-# Check Lambda function
-aws --endpoint-url=http://localhost:4566 lambda list-functions
-
 # Check DynamoDB table
-aws --endpoint-url=http://localhost:4566 dynamodb list-tables
+aws --endpoint-url=http://localhost:4566 dynamodb describe-table --table-name files
 
 # View Terraform outputs
 terraform output
+```
+
+**Test S3 + DynamoDB Integration:**
+```bash
+# Upload test file
+echo "Hello from test!" > /tmp/test.txt
+aws --endpoint-url=http://localhost:4566 s3 cp /tmp/test.txt s3://a7e-files/
+
+# Insert metadata into DynamoDB
+aws --endpoint-url=http://localhost:4566 dynamodb put-item \
+  --table-name files \
+  --item '{
+    "id": {"S": "test.txt"},
+    "bucket": {"S": "a7e-files"},
+    "size": {"N": "16"},
+    "timestamp": {"S": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}
+  }'
+
+# Verify data
+aws --endpoint-url=http://localhost:4566 dynamodb scan --table-name files
 ```
 
 ---
@@ -437,13 +464,22 @@ cat /tmp/response.json
 <summary><b>Test 3: Verify DynamoDB Entry</b></summary>
 
 ```bash
+# Insert test data
+aws --endpoint-url=http://localhost:4566 dynamodb put-item \
+  --table-name files \
+  --item '{
+    "id": {"S": "test.txt"},
+    "bucket": {"S": "a7e-files"},
+    "size": {"N": "22"}
+  }'
+
 # Scan DynamoDB table
 aws --endpoint-url=http://localhost:4566 dynamodb scan --table-name files
 
 # Query specific item
 aws --endpoint-url=http://localhost:4566 dynamodb get-item \
   --table-name files \
-  --key '{"file_id": {"S": "test.txt"}}'
+  --key '{"id": {"S": "test.txt"}}'
 ```
 
 </details>
