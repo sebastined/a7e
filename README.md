@@ -105,21 +105,49 @@ cd ..
 
 ### 3. Deploy with Terraform (LocalStack)
 
+#### Windows (PowerShell)
+
+```powershell
+cd terraform
+$env:AWS_ACCESS_KEY_ID="test"
+$env:AWS_SECRET_ACCESS_KEY="test"
+$env:AWS_DEFAULT_REGION="eu-central-1"
+terraform init
+terraform apply -var-file=environments/localstack.tfvars -auto-approve
+```
+
+#### Linux/macOS
+
 ```bash
 cd terraform
+export AWS_ACCESS_KEY_ID=test
+export AWS_SECRET_ACCESS_KEY=test
+export AWS_DEFAULT_REGION=eu-central-1
 terraform init
 terraform apply -var-file=environments/localstack.tfvars -auto-approve
 ```
 
 **Creates:**
 
-* S3 bucket (`a7e-files`)
-* DynamoDB table (`files`)
+* S3 bucket (`a7e-files`) with versioning and encryption
+* DynamoDB table (`files`) with GSI
 * Lambda function + DLQ
 * SNS topic
 * CloudWatch alarms
 * IAM roles and policies
-* KMS keys (where supported)
+* SSM Parameters
+
+**⚠️ LocalStack Limitations:**
+
+Some resources may fail or timeout in LocalStack:
+- S3 bucket logging (permission errors)
+- S3 lifecycle rules (may timeout after 3min)
+
+If deployment fails, import existing resources and retry:
+```bash
+terraform import -var-file=environments/localstack.tfvars "module.dynamodb.aws_dynamodb_table.main[0]" "files"
+terraform apply -var-file=environments/localstack.tfvars -target="module.lambda" -auto-approve
+```
 
 ---
 
@@ -147,10 +175,31 @@ pytest tests/ -v
 
 ### Integration Test (LocalStack)
 
+#### Windows (PowerShell)
+
+```powershell
+$env:AWS_ACCESS_KEY_ID="test"
+$env:AWS_SECRET_ACCESS_KEY="test"
+$env:AWS_DEFAULT_REGION="eu-central-1"
+
+# Create test file and upload
+"hello world" | Out-File -FilePath test.txt -Encoding utf8
+aws --endpoint-url http://localhost:4566 s3 cp test.txt s3://a7e-files/
+
+# Verify DynamoDB entry
+aws --endpoint-url http://localhost:4566 dynamodb scan --table-name files
+```
+
+#### Linux/macOS
+
 ```bash
-echo "hello" > /tmp/test.txt
-aws --endpoint-url=http://localhost:4566 s3 cp /tmp/test.txt s3://a7e-files/
-aws --endpoint-url=http://localhost:4566 dynamodb scan --table-name files
+export AWS_ACCESS_KEY_ID=test
+export AWS_SECRET_ACCESS_KEY=test
+export AWS_DEFAULT_REGION=eu-central-1
+
+echo "hello world" > test.txt
+aws --endpoint-url http://localhost:4566 s3 cp test.txt s3://a7e-files/
+aws --endpoint-url http://localhost:4566 dynamodb scan --table-name files
 ```
 
 ---
